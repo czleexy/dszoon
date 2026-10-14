@@ -1,0 +1,271 @@
+# Mock 设备剧本。
+#
+# 每个剧本模拟一类"真机上很难稳定复现、但一定会遇到"的行为：
+# 分页、ANSI 噪声、GBK 编码、认证失败、命令被拒绝、会话中途断连、设备卡死、内容截断。
+#
+# 约定：
+#   pattern       匹配设备收到的整行命令（已 strip），首个匹配生效
+#   output        直接回显的文本；output_file 指向 tests/fixtures 下的文件
+#   prompt        false 表示这条命令的输出后不打印提示符（如 Password:）
+#   set           修改设备内部状态（paging_enabled / mode / encoding / ...）
+#   behavior      hang=不再吐任何数据；close_mid_output=输出一半就断连
+#   echo         单条命令是否回显（密码类命令必须关掉）
+#
+# 未匹配到任何规则的命令一律回 default_output，用于验证"预处理命令被拒绝"的分支。
+
+- name: huawei-vrp8
+  hostname: HW-CORE-01
+  vendor: huawei
+  username: admin
+  password: admin123
+  banner: |
+    Info: The max number of VTY users is 10, and the number
+          of current VTY users on line is 1.
+  paging:
+    enabled: true
+    page_lines: 12
+    token: "  ---- More ----"
+    style: own_line
+  rules:
+    - pattern: '^screen-length 0 temporary$'
+      output: ''
+      set: {paging_enabled: false}
+    - pattern: '^screen-width 512$'
+      output: ''
+    - pattern: '^display version$'
+      output_file: huawei/vrp8/display_version.txt
+    - pattern: '^display current-configuration$'
+      output_file: huawei/vrp8/display_current-configuration.txt
+    - pattern: '^display saved-configuration$'
+      output_file: huawei/vrp8/display_saved-configuration.txt
+
+# ★ 真机回放：VRP5（S5720S）实测行为。
+#   `screen-width 512` 会弹 "This command will change the default screen width.
+#   Continue? [Y/N]:"，不回答就一直干等——空闲探活发的是空格，设备只认 Y/N，
+#   最终报"会话空闲 N 秒无数据"，完全指不到真正原因（实测白等 65 秒）。
+- name: huawei-vrp5-screen-width-confirm
+  hostname: HW-S5720-01
+  vendor: huawei
+  username: admin
+  password: admin123
+  paging:
+    enabled: true
+    page_lines: 10
+  rules:
+    - pattern: '^screen-length 0 temporary$'
+      output: ''
+      set: {paging_enabled: false}
+    - pattern: '^screen-width 512$'
+      output: 'Warning: This command will change the default screen width. Continue? [Y/N]:'
+      prompt: false
+    - pattern: '^[Yy]$'
+      output: ''
+      set: {term_width: 512}
+    - pattern: '^display version$'
+      output_file: huawei/vrp5/display_version.txt
+    - pattern: '^display current-configuration$'
+      output_file: huawei/vrp5/display_current-configuration.txt
+    - pattern: '^display saved-configuration$'
+      output: ''
+
+# 老设备：关分页/关折行命令都被拒绝 —— 采集器必须靠"响应分页提示符"把配置取全，
+# 同时把"预处理命令失败"作为警告暴露出来，而不是假装一切正常。
+- name: huawei-vrp8-paging-stuck
+  hostname: HW-OLD-01
+  vendor: huawei
+  username: admin
+  password: admin123
+  banner: |
+    Info: The max number of VTY users is 10.
+  paging:
+    enabled: true
+    page_lines: 10
+    token: "  ---- More ----"
+    style: own_line
+  rules:
+    - pattern: '^screen-length 0 temporary$'
+      output: "% Unrecognized command found at '^' position."
+    - pattern: '^screen-width 512$'
+      output: "% Unrecognized command found at '^' position."
+    - pattern: '^display version$'
+      output_file: huawei/vrp8/display_version.txt
+    - pattern: '^display current-configuration$'
+      output_file: huawei/vrp8/display_current-configuration.txt
+    - pattern: '^display saved-configuration$'
+      output: ''
+
+# 分页符贴在内容行尾（另一种常见实现），验证清洗层不会把两行粘起来或插入空行。
+- name: huawei-vrp8-more-inline
+  hostname: HW-EDGE-07
+  vendor: huawei
+  username: admin
+  password: admin123
+  paging:
+    enabled: true
+    page_lines: 9
+    token: "  ---- More ----"
+    style: inline
+  rules:
+    - pattern: '^screen-length 0 temporary$'
+      output: "% Unrecognized command found at '^' position."
+    - pattern: '^screen-width 512$'
+      output: "% Unrecognized command found at '^' position."
+    - pattern: '^display version$'
+      output_file: huawei/vrp8/display_version.txt
+    - pattern: '^display current-configuration$'
+      output_file: huawei/vrp8/display_current-configuration.txt
+    - pattern: '^display saved-configuration$'
+      output: ''
+
+# 华三 + GBK 中文描述 + ANSI 噪声：验证编码回退与转义序列清洗。
+- name: h3c-comware7-gbk
+  hostname: H3C-CORE-02
+  vendor: h3c
+  username: admin
+  password: admin123
+  encoding: gbk
+  ansi_noise: true
+  banner: |
+    * Copyright (c) 2004-2021 New H3C Technologies Co., Ltd.
+  paging:
+    enabled: true
+    page_lines: 11
+    token: "---- More ----"
+    style: own_line
+  rules:
+    - pattern: '^screen-length disable$'
+      output: ''
+      set: {paging_enabled: false}
+    - pattern: '^screen-width 512$'
+      output: ''
+    - pattern: '^display version$'
+      output_file: h3c/comware7/display_version.txt
+    - pattern: '^display current-configuration$'
+      output_file: h3c/comware7/display_current-configuration.txt
+    - pattern: '^display saved-configuration$'
+      output: ''
+
+# 锐捷：enable 提权（弹密码提示）+ 命令风格为 show/terminal。
+- name: ruijie-rgos11-enable
+  hostname: RJ-ACCESS-03
+  vendor: ruijie
+  username: admin
+  password: admin123
+  prompts:
+    user: '{hostname}>'
+    privileged: '{hostname}#'
+  banner: |
+    Ruijie Networks
+    RGOS 11.4(1)B70P2
+  paging:
+    enabled: true
+    page_lines: 12
+    token: "---- More ----"
+    style: own_line
+  rules:
+    - pattern: '^enable$'
+      output: 'Password: '
+      prompt: false
+    - pattern: '^RGenable123$'      # enable 密码，设备不回显
+      echo: false
+      output: ''
+      set: {mode: privileged}
+    - pattern: '^terminal length 0$'
+      output: ''
+      set: {paging_enabled: false}
+    - pattern: '^terminal width 512$'
+      output: ''
+    - pattern: '^show version$'
+      output_file: ruijie/rgos11/show_version.txt
+    - pattern: '^show running-config$'
+      output_file: ruijie/rgos11/show_running-config.txt
+    - pattern: '^show startup-config$'
+      output: ''
+
+# 锐捷：设备没设 enable 密码 —— enable 直接成功、不弹密码提示。
+# 采集器必须识别这种情况并跳过密码步骤，而不是把密码当命令发出去。
+- name: ruijie-rgos11-no-enable-password
+  hostname: RJ-EDGE-09
+  vendor: ruijie
+  username: admin
+  password: admin123
+  prompts:
+    user: '{hostname}>'
+    privileged: '{hostname}#'
+  paging:
+    enabled: false
+  rules:
+    - pattern: '^enable$'
+      output: ''
+      set: {mode: privileged}
+    - pattern: '^terminal length 0$'
+      output: ''
+    - pattern: '^terminal width 512$'
+      output: ''
+    - pattern: '^show version$'
+      output_file: ruijie/rgos11/show_version.txt
+    - pattern: '^show running-config$'
+      output_file: ruijie/rgos11/show_running-config.txt
+    - pattern: '^show startup-config$'
+      output: ''
+
+- name: huawei-auth-fail
+  hostname: HW-BADCRED
+  vendor: huawei
+  username: admin
+  password: correct-password
+  reject_auth: true
+
+- name: huawei-hang
+  hostname: HW-HANG
+  vendor: huawei
+  username: admin
+  password: admin123
+  paging:
+    enabled: false
+  rules:
+    - pattern: '^screen-length 0 temporary$'
+      output: ''
+    - pattern: '^screen-width 512$'
+      output: ''
+    - pattern: '^display version$'
+      output_file: huawei/vrp8/display_version.txt
+    - pattern: '^display current-configuration$'
+      behavior: hang
+
+- name: huawei-close-mid
+  hostname: HW-DROP
+  vendor: huawei
+  username: admin
+  password: admin123
+  paging:
+    enabled: false
+  rules:
+    - pattern: '^screen-length 0 temporary$'
+      output: ''
+    - pattern: '^screen-width 512$'
+      output: ''
+    - pattern: '^display version$'
+      output_file: huawei/vrp8/display_version.txt
+    - pattern: '^display current-configuration$'
+      output_file: huawei/vrp8/display_current-configuration.txt
+      behavior: close_mid_output
+
+# 设备返回了内容，但内容是残的（没有 return 结尾）——必须判为 integrity_error，
+# 绝不能静默当成"备份成功"。
+- name: huawei-truncated
+  hostname: HW-TRUNC
+  vendor: huawei
+  username: admin
+  password: admin123
+  paging:
+    enabled: false
+  rules:
+    - pattern: '^screen-length 0 temporary$'
+      output: ''
+    - pattern: '^screen-width 512$'
+      output: ''
+    - pattern: '^display version$'
+      output_file: huawei/vrp8/display_version.txt
+    - pattern: '^display current-configuration$'
+      output_file: huawei/vrp8/display_current-configuration_truncated.txt

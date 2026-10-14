@@ -1,0 +1,71 @@
+# 华三 Comware 驱动（Comware 5 / 7 / 9）
+#
+# ★ 命令与正则需在 P0 阶段真机实测校准。
+
+name: h3c
+display_name: 华三 Comware
+aliases: [h3c, comware, hp, hpe]
+description: 华三交换机/路由器（Comware 5 / 7 / 9）
+supports_deploy: false
+
+prompt_patterns:
+  - '^<(?P<hostname>[A-Za-z0-9_.\-]{1,63})>\s*$'
+  - '^\[~?(?P<hostname>[A-Za-z0-9_.\-]{1,63})(?:-[^\]\r\n]{1,80})?\]\s*$'
+
+# 反查设备名用的**无歧义**形态（只认用户视图 `<HOST>`，原因见 huawei.yaml 注释）
+hostname_prompt_patterns:
+  - '^<(?P<hostname>[A-Za-z0-9_.\-]{1,63})>\s*$'
+
+# Comware 用的关键字是 disable 而不是 0 temporary
+session_setup:
+  - 'screen-length disable'
+  - 'screen-width 512'
+
+# 同华为：终端宽度类命令可能弹 [Y/N] 确认，不回答会一直干等
+confirm_prompts:
+  - pattern: '[\[\(]\s*(?:[Yy](?:es)?|[Nn]o?)\s*/\s*(?:[Yy](?:es)?|[Nn]o?)\s*[\]\)]\s*:?\s*$'
+    reply: 'Y'
+
+# Comware 读配置通常在用户视图即可；若设备要求 level 3，需在凭据里配 enable 密码
+privilege: []
+
+commands:
+  version: 'display version'
+  running_config: 'display current-configuration'
+  startup_config: 'display saved-configuration'
+
+hostname_patterns:
+  - '^\s*sysname\s+(\S+)\s*$'
+
+facts:
+  model: '^\s*(?:H3C|HP|HPE)\s+(\S+)\s+uptime is'
+  software_version: '\bVersion\s+([\d.]+)'
+  release: '\bRelease\s+(\S+)'
+
+normalize:
+  drop_patterns:
+    - '^!Time:.*\n?'
+    - '^Current configuration.*\n?'
+
+redact:
+  - pattern: '^(\s*local-user\s+\S+\s+password\s+(?:cipher|hash|simple)\s+).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*password\s+(?:cipher|hash|simple)\s+).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*snmp-agent community\s+(?:read|write)\s+(?:cipher\s+)?).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*snmp-agent usm-user\s+v3\s+\S+\s+\S+\s+).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*key\s+(?:authentication|authorization|accounting)\s+(?:cipher|simple)\s+).*$'
+    replacement: '\1******'
+  # 兜底
+  - pattern: '^(\s*\S+\s+password\s+(?:cipher|hash|simple)\s+).*$'
+    replacement: '\1******'
+
+validate:
+  must_end_with:
+    - '^return\s*$'
+  must_contain:
+    - '^#'
+  min_lines: 10
+  min_bytes: 200

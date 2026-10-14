@@ -1,0 +1,39 @@
+# 仓库根目录的忽略规则（与 backend/.gitignore 互为补充）
+#
+# 注意：gitignore 的规则是**相对该文件所在目录**的，所以 backend/ 下的
+# `**/.env` 只管得住 backend/ 内部。根目录这份是为了兜住"在仓库根跑
+# docker compose --env-file .env"这类用法。
+
+# ---- 密钥：绝不能进版本库 ----
+# DSZOON_SECRET_KEY 是设备凭据的加密密钥，丢了/泄露了都要重录全部设备密码
+.env
+**/.env
+**/.env.local
+**/.secrets.json
+*.pem
+*.key
+
+# 模板必须入库（上面用 `.env` 精确匹配就是为了不误伤它）
+!**/.env.example
+
+# ---- 运行时数据与本地库 ----
+**/var/
+**/.spike/
+*.db
+*.sqlite
+*.sqlite3
+
+# ---- Python / 前端 ----
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/venv/
+**/.pytest_cache/
+**/node_modules/
+**/dist/
+
+# ---- 编辑器 / 操作系统 ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

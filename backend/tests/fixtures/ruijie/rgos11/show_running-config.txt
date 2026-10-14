@@ -1,0 +1,43 @@
+Building configuration...
+Current configuration : 4821 bytes
+!
+! Last configuration change at 2024-03-11 09:20:11
+!
+version RGOS 11.4(1)B70P2
+!
+hostname RJ-ACCESS-03
+!
+enable secret level 1 5 $1$abc$Kd93mZq1
+!
+username netadmin privilege 15 password 7 02030F4E5B1C
+!
+snmp-server community public RO
+snmp-server community private RW
+!
+vlan 10
+ name OFFICE
+!
+vlan 20
+ name SERVER
+!
+interface GigabitEthernet 0/1
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+ description To-Core
+!
+interface GigabitEthernet 0/2
+ switchport mode access
+ switchport access vlan 10
+!
+interface Vlan 10
+ ip address 10.30.10.1 255.255.255.0
+!
+ip route 0.0.0.0 0.0.0.0 10.30.10.254
+!
+ntp server 10.30.10.60
+!
+line vty 0 4
+ login local
+ transport input ssh
+!
+end

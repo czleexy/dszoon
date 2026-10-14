@@ -1,0 +1,86 @@
+# 锐捷 RGOS 驱动（RGOS 10 / 11）
+#
+# ★ 命令与正则需在 P0 阶段真机实测校准。
+#   锐捷与 Cisco 风格接近：分页用 terminal length，取配置用 show running-config，
+#   提权用 enable + 密码。
+
+name: ruijie
+display_name: 锐捷 RGOS
+aliases: [ruijie, rgos, red-giant]
+description: 锐捷交换机/路由器（RGOS 10 / 11）
+supports_deploy: false
+
+prompt_patterns:
+  - '^(?P<hostname>[A-Za-z0-9_.\-]{1,63})>\s*$'
+  - '^(?P<hostname>[A-Za-z0-9_.\-]{1,63})#\s*$'
+  - '^(?P<hostname>[A-Za-z0-9_.\-]{1,63})\([^)\r\n]{1,80}\)#\s*$'
+
+# 反查设备名用的形态。锐捷的配置模式提示符是 `HOST(config)#`——
+# `(` 不在设备名字符类里，所以切点是确定的，可以安全用于反查。
+hostname_prompt_patterns:
+  - '^(?P<hostname>[A-Za-z0-9_.\-]{1,63})>\s*$'
+  - '^(?P<hostname>[A-Za-z0-9_.\-]{1,63})#\s*$'
+  - '^(?P<hostname>[A-Za-z0-9_.\-]{1,63})\([^)\r\n]{1,80}\)#\s*$'
+
+session_setup:
+  - 'terminal length 0'
+  - 'terminal width 512'
+
+# 终端设置类命令可能弹 [Y/N] 确认（如 "Are you sure? [Y/N]:"），必须自动回答
+confirm_prompts:
+  - pattern: '[\[\(]\s*(?:[Yy](?:es)?|[Nn]o?)\s*/\s*(?:[Yy](?:es)?|[Nn]o?)\s*[\]\)]\s*:?\s*$'
+    reply: 'Y'
+
+# 提权：enable 会弹 Password:，随后把密码发过去。
+#   optional: true —— 设备若没设 enable 密码，enable 直接成功、不弹提示，
+#   此时等密码提示会超时，但会话没坏，引擎会 resync 后继续。
+privilege:
+  - command: 'enable'
+    expect: '(?i)^\s*(?:password|passwd)\s*:?\s*$'
+    timeout: 3
+    optional: true
+  - command: '{enable_password}'
+    secret: true
+    optional: false
+
+commands:
+  version: 'show version'
+  running_config: 'show running-config'
+  startup_config: 'show startup-config'
+
+hostname_patterns:
+  - '^\s*hostname\s+(\S+)\s*$'
+
+facts:
+  model: 'System description\s*:\s*.*\(([^()]+)\)'
+  software_version: 'System software version\s*:\s*(\S+\s+\S+)'
+  hardware_version: 'System hardware version\s*:\s*(\S+)'
+
+normalize:
+  drop_patterns:
+    - '^Building configuration\.\.\.\s*\n?'
+    - '^Current configuration\s*:\s*\d+\s*bytes.*\n?'
+    - '^!\s*Time:.*\n?'
+    - '^!\s*Last configuration change.*\n?'
+    - '^!\s*NVRAM config last updated.*\n?'
+
+redact:
+  - pattern: '^(\s*enable\s+(?:secret|password)(?:\s+level\s+\d+)?\s+(?:\d+\s+)?).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*username\s+\S+(?:\s+privilege\s+\d+)?\s+password\s+(?:\d+\s+)?).*$'
+    replacement: '\1******'
+  # community 名本身也敏感，但读/写权限要保留 —— 用第二个捕获组留尾巴
+  - pattern: '^(\s*snmp-server community\s+)\S+(.*)$'
+    replacement: '\1******\2'
+  - pattern: '^(\s*radius-server\s+(?:key|auth-key)\s+(?:\d+\s+)?).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*ntp\s+authentication-key\s+\d+\s+md5\s+).*$'
+    replacement: '\1******'
+
+validate:
+  must_end_with:
+    - '^end\s*$'
+  must_contain:
+    - '^!'
+  min_lines: 10
+  min_bytes: 200

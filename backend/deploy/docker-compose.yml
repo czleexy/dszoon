@@ -1,0 +1,91 @@
+# 用法：
+#   cd backend/deploy
+#   copy .env.example .env   然后改掉所有口令与密钥
+#   docker compose up -d --build
+#
+# 默认用 PostgreSQL；不需要 nginx 时删掉 nginx 服务，直接把 app 的 8000 端口暴露出去即可。
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dszoon}
+      POSTGRES_USER: ${POSTGRES_USER:-dszoon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请设置 POSTGRES_PASSWORD}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dszoon} -d ${POSTGRES_DB:-dszoon}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      DSZOON_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dszoon}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-dszoon}
+      DSZOON_DATA_DIR: /data
+      # 这两个密钥必须自己生成并长期保存：
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+      DSZOON_SECRET_KEY: ${DSZOON_SECRET_KEY:?请设置 DSZOON_SECRET_KEY（设备凭据加密密钥）}
+      DSZOON_JWT_SECRET: ${DSZOON_JWT_SECRET:?请设置 DSZOON_JWT_SECRET}
+      DSZOON_ADMIN_PASSWORD: ${DSZOON_ADMIN_PASSWORD:-}
+      DSZOON_BACKUP_CONCURRENCY: ${DSZOON_BACKUP_CONCURRENCY:-20}
+      # ---- P2 ----
+      # ★ 这里用的是**显式列环境变量**（不是 env_file: .env），所以每一项都要单独透传。
+      #   漏掉的后果是"文档里写了、代码支持了、容器里收不到"，而且在单机开发环境里
+      #   永远暴露不出来：
+      #   * SCHEDULER_ENABLED 收不到 → 多实例部署时每个实例都开调度器，同一策略被重复执行；
+      #   * AUTO_CREATE_SCHEMA 收不到 → 你在 .env 里设 false 也没用，应用照样 create_all。
+      #   tests/unit/test_deploy_config.py 会盯着这一点。
+      DSZOON_AUTO_CREATE_SCHEMA: ${DSZOON_AUTO_CREATE_SCHEMA:-true}
+      DSZOON_SCHEDULER_ENABLED: ${DSZOON_SCHEDULER_ENABLED:-true}
+      DSZOON_SCHEDULER_POLL_SECONDS: ${DSZOON_SCHEDULER_POLL_SECONDS:-30}
+      DSZOON_RETENTION_INTERVAL_HOURS: ${DSZOON_RETENTION_INTERVAL_HOURS:-24}
+      # ---- P3 ----
+      DSZOON_COMPLIANCE_ENABLED: ${DSZOON_COMPLIANCE_ENABLED:-true}
+      DSZOON_COMPLIANCE_RULES: ${DSZOON_COMPLIANCE_RULES:-[]}
+      # ---- P4 ----
+      # 配置下发默认**关闭**，且这里给的默认值也是 false：容器里"悄悄开着"是最糟的情况。
+      DSZOON_DEPLOY_ENABLED: ${DSZOON_DEPLOY_ENABLED:-false}
+      DSZOON_DEPLOY_ALLOW_SELF_APPROVAL: ${DSZOON_DEPLOY_ALLOW_SELF_APPROVAL:-false}
+      # 正文存储后端：filesystem（默认）| git。用 git 时仓库默认就是数据卷 /data，
+      # 而 objects/ 正在它下面，满足"对象目录必须在仓库内"这个前提。
+      DSZOON_BLOB_BACKEND: ${DSZOON_BLOB_BACKEND:-filesystem}
+      DSZOON_GIT_REPO: ${DSZOON_GIT_REPO:-/data}
+      DSZOON_CORS_ORIGINS: '[]'
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      # 配置正文与会话日志；丢了它=丢了所有历史版本（数据库里只有指针）
+      - appdata:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+    ports:
+      # 不用 nginx 时直接对外暴露；用 nginx 时可以注释掉这行
+      - "${APP_PORT:-8000}:8000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    profiles: ["with-nginx"]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  appdata:

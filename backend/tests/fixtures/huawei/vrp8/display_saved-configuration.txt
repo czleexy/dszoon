@@ -1,0 +1,9 @@
+#
+!Software Version VRP (R) software, Version 8.180 (S5731 V200R019C10SPC500)
+!Last configuration was saved at 2024-03-11 09:15:02+08:00
+#
+sysname HW-CORE-01
+#
+vlan batch 10 20 30 100
+#
+return

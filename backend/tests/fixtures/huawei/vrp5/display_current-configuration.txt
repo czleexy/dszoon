@@ -1,0 +1,44 @@
+#
+!Software Version VRP (R) software, Version 5.170 (S5720 V200R011C10SPC600)
+!Last configuration was updated at 2024-05-06 09:31:22+08:00
+#
+sysname HW-S5720-01
+#
+vlan batch 100 110
+#
+stelnet ipv4 server enable
+stelnet ipv6 server enable
+#
+ssh user netadmin
+ssh user netadmin authentication-type password
+ssh user netadmin service-type stelnet
+#
+aaa
+ authentication-scheme default
+ local-user netadmin password irreversible-cipher $1a$AbCdEfGh$0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ
+ local-user netadmin privilege level 15
+ local-user netadmin service-type ssh
+#
+interface Vlanif100
+ ip address 192.168.100.1 255.255.255.0
+#
+interface GigabitEthernet0/0/1
+ port link-type trunk
+ port trunk allow-pass vlan 110 to 4094
+#
+interface GigabitEthernet0/0/2
+ port link-type access
+ port default vlan 100
+#
+interface XGigabitEthernet0/0/1
+ port link-type trunk
+ port trunk allow-pass vlan 2 to 4094
+#
+user-interface con 0
+ authentication-mode aaa
+user-interface vty 0 4
+ authentication-mode aaa
+ user privilege level 15
+ protocol inbound all
+#
+return

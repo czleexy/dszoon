@@ -1,0 +1,61 @@
+#
+!Software Version VRP (R) software, Version 8.180 (S5731 V200R019C10SPC500)
+!Last configuration was updated at 2024-03-11 09:12:33+08:00
+!Last configuration was saved at 2024-03-11 09:15:02+08:00
+#
+sysname HW-CORE-01
+#
+header login information "^"
+Welcome to HQ data center. Maintenance window 02:00-04:00.
+[HQ-DC1-CORE]
+"^"
+#
+info-center loghost 10.10.10.50
+#
+vlan batch 10 20 30 100
+#
+stp mode rstp
+stp root primary
+#
+aaa
+ authentication-scheme default
+ authorization-scheme default
+ local-user netadmin password irreversible-cipher %^%#Kj8sLm2QpR7dXw%^%#
+ local-user netadmin privilege level 15
+ local-user netadmin service-type ssh terminal
+#
+interface Vlanif10
+ ip address 10.10.10.1 255.255.255.0
+ description MGMT-GATEWAY
+#
+interface Vlanif20
+ ip address 10.10.20.1 255.255.255.0
+#
+interface GigabitEthernet0/0/1
+ port link-type trunk
+ port trunk allow-pass vlan 10 20 30 100
+ description [UPLINK-TO-DC-SPINE]
+#
+interface GigabitEthernet0/0/2
+ port link-type access
+ port default vlan 20
+ stp edged-port enable
+#
+interface GigabitEthernet0/0/3
+ shutdown
+#
+snmp-agent
+snmp-agent local-engineid 800007DB03000000000000
+snmp-agent community read cipher %^%#Qm3xT9vLpR7dN4%^%#
+snmp-agent sys-info version v2c v3
+#
+ntp-service unicast-server 10.10.10.60
+#
+stelnet server enable
+#
+user-interface vty 0 4
+ authentication-mode aaa
+ protocol inbound ssh
+ screen-length 0
+#
+return

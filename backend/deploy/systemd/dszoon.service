@@ -1,0 +1,43 @@
+[Unit]
+Description=dszoon 网络设备配置备份
+Documentation=file:/opt/dszoon/backend/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dszoon
+Group=dszoon
+WorkingDirectory=/opt/dszoon/backend
+# 密钥等敏感配置放这里，权限 0600；不要在命令行里传密钥（ps 能看到）
+EnvironmentFile=-/etc/dszoon.env
+ExecStart=/opt/dszoon/venv/bin/uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+# 采集是长连接 + 高并发，句柄数要给够
+LimitNOFILE=65535
+# 轻量加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# 进程只需要写数据目录（配置正文 + 会话日志）；日志走 stdout 交给 journald。
+# 这里不要列 /var/log/xxx——应用并不往那儿写。
+ReadWritePaths=/opt/dszoon/backend/var
+
+[Install]
+WantedBy=multi-user.target
+
+# 安装步骤：
+#   1) 建用户：useradd -r -s /sbin/nologin dszoon
+#   2) 代码放 /opt/dszoon/backend，虚拟环境 /opt/dszoon/venv
+#   3) /etc/dszoon.env 内容示例：
+#        DSZOON_DATABASE_URL=postgresql+asyncpg://dszoon:***@127.0.0.1:5432/dszoon
+#        DSZOON_SECRET_KEY=<Fernet key>
+#        DSZOON_JWT_SECRET=<随机串>
+#        DSZOON_DATA_DIR=/opt/dszoon/backend/var
+#      然后 chmod 600 /etc/dszoon.env && chown dszoon /etc/dszoon.env
+#      ★ `.env.example` 里的每一个开关（含 P2 的 DSZOON_AUTO_CREATE_SCHEMA、
+#        DSZOON_SCHEDULER_*、DSZOON_RETENTION_INTERVAL_HOURS）都可以直接写在这里：
+#        EnvironmentFile 会全部透传。这一点和 docker-compose 不同——那边是显式列
+#        环境变量，漏一项就等于那个开关不存在（有测试盯着：tests/unit/test_deploy_config.py）。
+#   4) cp dszoon.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now dszoon

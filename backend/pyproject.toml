@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dszoon-backup"
+version = "0.1.0"
+description = "网络设备配置备份系统（华为 VRP / 华三 Comware / 锐捷 RGOS）"
+requires-python = ">=3.11"
+dependencies = [
+    # 采集层（P0）
+    "asyncssh>=2.14.2",
+    "paramiko>=3.4.0",          # 老旧设备算法兜底（见 DEVELOPMENT_PLAN R2）
+    "PyYAML>=6.0.1",
+]
+
+[project.optional-dependencies]
+# P1 Web 应用层。采集骨架（P0）不需要这些依赖也能单独跑。
+web = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "aiosqlite>=0.20",          # 开发/单机默认库
+    "asyncpg>=0.29",            # 生产 PostgreSQL
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "PyJWT>=2.8",
+    "httpx>=0.27",              # 通知渠道（Webhook/钉钉/企微/飞书）走它发 HTTP
+    "cryptography>=42.0",       # 设备凭据加密（Fernet）
+    "alembic>=1.13",
+    # P2 定时调度。锁 3.x：4.x 的 API 完全不同（Scheduler/Trigger 都换了），
+    # 而 P4 若横向扩展会换成 Celery，没必要现在跟进 4.x。
+    "apscheduler>=3.10,<4",
+]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",              # ASGI 接口测试
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+dszoon = "app.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true

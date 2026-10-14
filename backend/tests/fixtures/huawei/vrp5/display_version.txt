@@ -1,0 +1,15 @@
+Huawei Versatile Routing Platform Software
+VRP (R) software, Version 5.170 (S5720 V200R011C10SPC600)
+Copyright (C) 2000-2018 HUAWEI TECH Co., Ltd.
+HUAWEI S5720S-28X-SI-AC Routing Switch uptime is 1 week, 4 days, 4 hours, 11 minutes
+
+ES5D2T28S000 0(Master)  : uptime is 1 week, 4 days, 4 hours, 9 minutes
+DDR             Memory Size : 512   M bytes
+FLASH Total     Memory Size : 512   M bytes
+FLASH Available Memory Size : 241   M bytes
+Pcb           Version   : VER.B
+BootROM       Version   : 020b.0a05
+BootLoad      Version   : 020b.0a06
+CPLD          Version   : 010f
+Software      Version   : VRP (R) Software, Version 5.170 (V200R011C10SPC600)
+FLASH         Version   : 0x0

@@ -1,0 +1,20 @@
+#
+!Software Version VRP (R) software, Version 8.180 (S5731 V200R019C10SPC500)
+#
+sysname HW-CORE-01
+#
+vlan batch 10 20 30 100
+#
+aaa
+ authentication-scheme default
+ local-user netadmin password irreversible-cipher %^%#Kj8sLm2QpR7dXw%^%#
+#
+interface Vlanif10
+ ip address 10.10.10.1 255.255.255.0
+#
+interface GigabitEthernet0/0/1
+ port link-type trunk
+ port trunk allow-pass vlan 10 20 30 100
+ description [UPLINK-TO-DC-SPINE]
+#
+interface GigabitEthernet0/0/2

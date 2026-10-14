@@ -1,0 +1,50 @@
+#
+ version 7.1.070, Release 6126P02
+#
+ sysname H3C-CORE-02
+#
+ clock timezone Beijing add 08:00:00
+#
+ telnet server enable
+#
+vlan 1
+#
+vlan 10
+ description 办公区接入
+#
+vlan 20
+ description 服务器区
+#
+interface GigabitEthernet1/0/1
+ port link-mode bridge
+ port link-type trunk
+ port trunk permit vlan 1 10 20
+ description To-HW-CORE-01
+#
+interface GigabitEthernet1/0/2
+ port link-mode bridge
+ port link-type access
+ port access vlan 10
+#
+interface Vlan-interface10
+ ip address 10.20.10.1 255.255.255.0
+#
+ip route-static 0.0.0.0 0 10.20.10.254
+#
+snmp-agent
+snmp-agent community read cipher %$%$7Xk2Lm9Q%$%$
+snmp-agent sys-info version v2c v3
+#
+ntp-service unicast-server 10.20.10.60
+#
+ssh server enable
+#
+line class aux
+ user-role network-admin
+#
+line vty 0 63
+ authentication-mode scheme
+ user-role network-admin
+ protocol inbound ssh
+#
+return

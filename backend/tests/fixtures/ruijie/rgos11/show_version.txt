@@ -1,0 +1,6 @@
+System description      : Ruijie Full 10G Routing Switch(S6220-48XS4QXS) By Ruijie Networks
+System start time       : 2024-01-02 08:00:00
+System uptime           : 68d:4h:33m:12s
+System hardware version : 1.10
+System software version : RGOS 11.4(1)B70P2
+System boot version     : 11.4(1)B70P2

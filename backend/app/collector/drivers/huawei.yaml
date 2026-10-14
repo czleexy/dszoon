@@ -1,0 +1,103 @@
+# 华为 VRP 驱动（交换机 / 路由器 / 部分防火墙）
+#
+# ★ 本文件的命令与正则**必须在 P0 阶段用真机实测校准**（见 docs/SPIKE_REPORT.md）。
+#   VRP5 与 VRP8 在分页/宽度命令上存在差异，实测后用设备级 override 区分。
+
+name: huawei
+display_name: 华为 VRP
+aliases: [hw, vrp, huawei-vrp]
+description: 华为交换机/路由器（VRP5 / VRP8）
+supports_deploy: false          # v1.0 只读
+
+# 提示符：
+#   <HUAWEI>                        用户视图
+#   [HUAWEI] / [~HUAWEI]            系统视图（~ 表示有未保存改动）
+#   [HUAWEI-GigabitEthernet0/0/1]   接口等子视图
+# 捕获组名必须是 hostname —— 引擎会用真实设备名替换它，生成更严格的正则。
+prompt_patterns:
+  - '^<(?P<hostname>[A-Za-z0-9_.\-]{1,63})>\s*$'
+  - '^\[~?(?P<hostname>[A-Za-z0-9_.\-]{1,63})(?:-[^\]\r\n]{1,80})?\]\s*$'
+
+# 反查设备名用的**无歧义**形态：只认用户视图的 `<HOST>`。
+#
+# 为什么不认 `[HOST]`：方括号形态和子视图 `[HOST-Interface]` 在正则层面无法区分——
+# `[HW-CORE-01-GigabitEthernet0/0/1]` 整体都能被 [A-Za-z0-9_.-] 吃掉，切点无从判断。
+# 猜错的代价比不猜大得多：错误的"设备名"会生成一个永不匹配的严格提示符正则，
+# 导致这台设备的每一条命令都超时。所以这里宁可不认，让引擎回退到泛化提示符
+# （可用，只是少了"防正文误命中"这层保护）。
+hostname_prompt_patterns:
+  - '^<(?P<hostname>[A-Za-z0-9_.\-]{1,63})>\s*$'
+
+# 会话预处理：关分页 + 关折行。
+# screen-width 是防"配置被折行劈开"的关键——实测真机上存在约 100 字符的长行
+# （local-user ... irreversible-cipher ...），终端宽度若是默认的 80 就会被劈开。
+session_setup:
+  - 'screen-length 0 temporary'
+  - 'screen-width 512'
+
+# 需要自动回答的交互确认。
+# 实测 VRP5.170（S5720S-28X-SI-AC）：`screen-width 512` 会弹
+#   Warning: This command will change the default screen width. Continue? [Y/N]:
+# 不回答就会一直干等（空闲探活发的是空格，设备只认 Y/N），最终报"会话空闲超时"。
+# 回答 Y 只改变**本次会话**的终端宽度，不会写进配置——已用 display current-configuration
+# 核对（配置里没有 screen-width 行）。引擎还会在采集后复查一次（见 check_setup_leakage）。
+confirm_prompts:
+  - pattern: '[\[\(]\s*(?:[Yy](?:es)?|[Nn]o?)\s*/\s*(?:[Yy](?:es)?|[Nn]o?)\s*[\]\)]\s*:?\s*$'
+    reply: 'Y'
+
+# 华为读配置无需 enable 提权
+privilege: []
+
+commands:
+  version: 'display version'
+  running_config: 'display current-configuration'
+  startup_config: 'display saved-configuration'
+  # save 命令故意不定义：备份场景不得改动设备状态
+
+hostname_patterns:
+  - '^\s*sysname\s+(\S+)\s*$'
+
+facts:
+  # 型号与 "uptime is" 之间可能夹着产品描述：VRP5 实测回显是
+  #   HUAWEI S5720S-28X-SI-AC Routing Switch uptime is 1 week, ...
+  # 早期正则要求型号紧跟 "uptime is"，在真机上直接抓不到 model
+  # （facts 里没有 model 键，但备份本身是成功的，所以很难察觉）。
+  model: '^\s*(?:HUAWEI|Huawei)\s+(\S+)(?:\s+.*?)?\s+uptime is'
+  software_version: '\bVersion\s+([\w.()]+)'
+  platform: '^(.*\bVRP\b.*)$'
+
+# 归一化：只影响 diff 比对，不影响归档原文
+normalize:
+  drop_patterns:
+    - '^!Software Version .*\n?'
+    - '^!Last configuration was (?:updated|saved) at .*\n?'
+    - '^!Time:.*\n?'
+
+redact:
+  - pattern: '^(\s*set authentication password\s+(?:cipher|simple)\s+).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*local-user\s+\S+\s+password\s+\S+\s+).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*snmp-agent community\s+(?:read|write)\s+(?:cipher\s+)?).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*snmp-agent usm-user\s+v3\s+\S+\s+\S+\s+).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*(?:radius-server|hwtacacs-server)\s+shared-key\s+(?:cipher\s+)?).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*ppp\s+pap\s+local-user\s+\S+\s+password\s+(?:cipher\s+)?).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*ospf authentication-mode\s+\S+\s+\S+\s+(?:cipher\s+)?).*$'
+    replacement: '\1******'
+  - pattern: '^(\s*key-string\s+(?:cipher\s+)?).*$'
+    replacement: '\1******'
+  # 兜底：任何 "password <加密关键字> <值>"
+  - pattern: '^(\s*\S+\s+password\s+(?:cipher|irreversible-cipher|simple)\s+).*$'
+    replacement: '\1******'
+
+validate:
+  must_end_with:
+    - '^return\s*$'
+  must_contain:
+    - '^#'
+  min_lines: 10
+  min_bytes: 200

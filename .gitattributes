@@ -1,0 +1,47 @@
+# 行尾与二进制标记。
+#
+# 为什么需要它：`deploy/` 下的部署脚本是 bash（install.sh / make_bundle.sh），
+# 一旦在 Windows 上检出成 CRLF，拿到 Linux 上执行会报
+#   bash: ./install.sh: /bin/bash^M: bad interpreter: No such file or directory
+# 这是"在打包机上是好的、到内网机器上跑不起来"的经典原因，而且报错完全指不到真因。
+# 这里把 shell 与 Python 脚本钉死成 LF，不管谁在哪台机器上克隆。
+
+* text=auto
+
+# ---- 必须在任何平台都是 LF ----
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.py    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.cfg   text eol=lf
+*.txt   text eol=lf
+Dockerfile text eol=lf
+*.service  text eol=lf
+
+# ---- Windows 原生脚本 ----
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# ---- 二进制：不要做行尾转换，diff 也没意义 ----
+*.db       binary
+*.sqlite   binary
+*.sqlite3  binary
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.ico      binary
+*.woff     binary
+*.woff2    binary
+*.ttf      binary
+*.zip      binary
+*.gz       binary
+*.tar      binary
+*.whl      binary
+
+# ---- 让 GitHub 的语言统计别把前端产物算进来 ----
+backend/web/dist/** linguist-generated=true

@@ -1,0 +1,137 @@
+# dszoon 内置合规基线
+#
+# 这些是**起点**，不是标准答案：等保 2.0 / 行业规范 / 客户内部基线各不相同，
+# 请按现场要求增删。用 DSZOON_COMPLIANCE_RULES 指向自己的 YAML 即可**整体替换**
+# 本文件（不是叠加，见 app/compliance/rules.py 的 load_ruleset）。
+#
+# 写法要点：
+# * 正则用**单引号**包起来（YAML 单引号里反斜杠是字面量，省得写双反斜杠）；
+# * 逐行匹配，^ $ 按行首行尾理解（引擎用 re.MULTILINE）；
+# * assert_present 多个模式是"与"（全部要命中）；想表达"或"就写进同一个正则的 | 里；
+# * severity: high（违规即 fail，会发通知）/ medium / low（仅提示）。
+#
+# 每条规则的注释里写了"在仓库夹具上会命中什么"，改动规则时请同步更新——
+# tests/unit/test_compliance.py 就是按这些预期断言的。
+
+# --------------------------------------------------------------------------
+# high：直接暴露管理面或凭据风险
+# --------------------------------------------------------------------------
+- id: no-telnet-server
+  vendors: [huawei, h3c, ruijie]
+  desc: 禁止开启 Telnet 服务（明文协议，口令与配置全程裸奔）
+  severity: high
+  assert_absent: '^\s*telnet\s+(?:server\s+)?enable\s*$'
+  message: 关闭 telnet 服务，运维统一走 SSH；确需保留请限制源地址 ACL
+  # 夹具：华三 comware7 命中（该夹具确实开着 telnet），华为/锐捷未命中
+
+- id: ssh-server-enabled
+  vendors: [huawei, h3c, ruijie]
+  desc: 必须开启 SSH 服务（远程管理唯一入口）
+  severity: high
+  assert_present: '^\s*(?:stelnet\s+server\s+enable|ssh\s+server\s+enable|enable\s+service\s+ssh-server)\s*$'
+  message: 开启 SSH 服务（华为 stelnet server enable / 华三 ssh server enable / 锐捷 enable service ssh-server）
+  # 夹具：锐捷 rgos11 命中（该夹具只有 transport input ssh，没开 ssh 服务）
+
+- id: no-telnet-on-vty
+  desc: VTY 不得接受 Telnet 登录
+  severity: high
+  assert_absent:
+    - '^\s*protocol\s+inbound\s+(?:telnet|all)\s*$'
+    - '^\s*transport\s+input\s+(?:telnet|all)\s*$'
+  message: 把 VTY 的接入协议改成仅 ssh（华为/华三 protocol inbound ssh、锐捷 transport input ssh）
+
+- id: vty-ssh-only
+  desc: VTY 必须显式只允许 SSH
+  severity: high
+  assert_present: '^\s*(?:protocol\s+inbound\s+ssh|transport\s+input\s+ssh)\s*$'
+  message: 显式声明只允许 ssh 接入，不要依赖设备默认值
+
+- id: no-default-snmp-community
+  desc: 禁止使用 public/private 等默认 SNMP 团体名
+  severity: high
+  assert_absent: '^\s*snmp-(?:agent|server)\s+community\s+(?:read\s+|write\s+|ro\s+|rw\s+)?(?:public|private)\b'
+  message: 删除默认团体名，改用 SNMPv3（或至少换成不可猜的团体名 + 只读 + 源地址限制）
+  # 夹具：锐捷 rgos11 命中（community public RO / private RW）
+
+- id: no-console-noauth
+  desc: 禁止无认证的登录方式
+  severity: high
+  assert_absent: '^\s*authentication-mode\s+none\s*$'
+  message: Console/VTY 必须要求认证（aaa / scheme / login local）
+
+- id: no-type7-password
+  vendors: [ruijie]
+  desc: 禁止使用 type 0/7 存储口令（type 7 可逆、type 0 是明文）
+  severity: high
+  assert_absent: '^\s*username\s+\S+(?:\s+privilege\s+\d+)?\s+password\s+(?:0|7)\s'
+  message: 改用密文类型（type 5 及以上）或集中认证（AAA/TACACS/RADIUS）
+  # 夹具：锐捷 rgos11 命中（username netadmin ... password 7 02030F4E5B1C）
+
+- id: no-plaintext-enable
+  vendors: [ruijie]
+  desc: 禁止使用明文提权口令
+  severity: high
+  assert_absent: '^\s*enable\s+password\s'
+  message: 改成 enable secret，或不要设置提权口令、改用 privilege 级别控制
+
+# --------------------------------------------------------------------------
+# medium：加固缺失，不一定立刻出事故
+# --------------------------------------------------------------------------
+- id: no-plaintext-snmp-community
+  vendors: [huawei, h3c]
+  desc: SNMP 团体名不得明文存储
+  severity: medium
+  assert_absent: '^\s*snmp-(?:agent|server)\s+community\s+(?:read|write|ro|rw)\s+\S+\s*$'
+  message: 团体名要用 cipher 存储（snmp-agent community read cipher ...）
+  # 说明：锐捷的 community 加密级别语法（0/7 前缀）未经真机确认，暂不为它写规则；
+  #      默认团体名由 no-default-snmp-community 覆盖
+
+- id: ntp-configured
+  desc: 必须配置 NTP（时间不准会让日志与审计失去可比性）
+  severity: medium
+  assert_present: '^\s*(?:ntp-service\s+unicast-server|ntp-service\s+unicast-peer|ntp-service\s+source-interface|ntp\s+server)\s'
+  message: 至少配置一个 NTP 服务器；等保要求审计记录时间准确
+
+- id: logging-host-configured
+  desc: 必须配置日志服务器
+  severity: medium
+  assert_present: '^\s*(?:info-center\s+loghost|logging\s+host|logging\s+\d+\.\d+\.\d+\.\d+)\s'
+  message: 配置 syslog 服务器，本地日志会随重启丢失
+  # 夹具：华三/锐捷命中（两个夹具都没配日志服务器），华为未命中
+
+- id: login-uses-aaa-or-local
+  desc: 登录认证必须走 AAA 或本地用户库
+  severity: medium
+  assert_present: '^\s*(?:authentication-mode\s+(?:aaa|scheme)|aaa\s+new-model|aaa\s+authentication\s+login|login\s+local)\s*$'
+  message: 别用设备默认的弱认证；集中认证优先
+  # 三种写法都收：华为 authentication-mode aaa、华三 authentication-mode scheme、锐捷 login local
+
+- id: no-http-server
+  desc: 禁止开启 Web/HTTP 管理
+  severity: medium
+  assert_absent: '^\s*(?:http\s+server\s+enable|http\s+secure-server\s+enable|ip\s+http\s+server|ip\s+http\s+secure-server)\s*$'
+  message: 关闭 HTTP(S) 管理面，需要时限制源地址并强制 HTTPS
+
+- id: idle-timeout-configured
+  desc: 登录空闲超时必须设置
+  severity: medium
+  assert_present: '^\s*(?:idle-timeout|exec-timeout)\s+\d+'
+  message: 设置空闲超时（华为/华三 idle-timeout、锐捷 exec-timeout），否则会话长期挂着
+  # 夹具：三个夹具都命中（都没设空闲超时）
+
+- id: no-weak-password-storage
+  vendors: [huawei, h3c]
+  desc: 本地用户口令不得用 simple（明文）存储
+  severity: medium
+  assert_absent: '^\s*local-user\s+\S+\s+password\s+simple\s+\S+'
+  message: 用 irreversible-cipher / cipher 存储
+
+# --------------------------------------------------------------------------
+# low：建议项，只提示不判 fail
+# --------------------------------------------------------------------------
+- id: banner-configured
+  desc: 建议配置登录告警横幅（法律告知）
+  severity: low
+  assert_present: '^\s*(?:header\s+login|banner\s+login|banner\s+motd)\s'
+  message: 配置登录横幅，声明"未授权访问将被追究"
+  # 夹具：华三/锐捷命中（都没横幅），华为未命中（有 header login）

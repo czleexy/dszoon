@@ -1,0 +1,10 @@
+Huawei Versatile Routing Platform Software
+VRP (R) software, Version 8.180 (S5731 V200R019C10SPC500)
+Copyright (C) 2012-2021 Huawei Technologies Co., Ltd. All rights reserved.
+HUAWEI S5731-H24T4XC uptime is 128 days, 4 hours, 33 minutes
+Memory Size : 2048 MB
+Flash Size : 1024 MB
+SDRAM Size : 4096 MB
+Board Type : S5731-H24T4XC
+MPU Board Quantity : 1
+Slot Power Mode : normal

@@ -1,0 +1,6 @@
+H3C Comware Software, Version 7.1.070, Release 6126P02
+Copyright (c) 2004-2021 New H3C Technologies Co., Ltd. All rights reserved.
+H3C S5560X-30C-EI uptime is 0 weeks, 1 day, 6 hours, 12 minutes
+Boot image: flash:/s5560x-cmw710-boot-r6126p02.bin
+Bootrom version: 147
+Patch version: None

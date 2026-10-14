@@ -1,0 +1,52 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 运行时数据 ----
+# 配置正文（含设备口令密文）与会话日志都在这里，绝不能进版本库
+var/
+.spike/
+*.log
+
+# ---- 密钥与凭据（★ 最重要的一段）----
+# ⚠ .env 里有 DSZOON_SECRET_KEY（设备凭据加密密钥）和数据库口令。
+#   按 README 把 deploy/.env.example 复制成 .env 之后，如果没有这行，
+#   一次 `git add .` 就把密钥和口令提交进仓库了——这是密钥泄露最常见的路径。
+#
+# 用 `.env` 精确匹配而不是 `.env.*`：后者会把必须入库的模板
+# deploy/.env.example 一起忽略掉。
+.env
+**/.env
+*.env.local
+.env.*.local
+**/.secrets.json
+
+# TLS 私钥 / 证书（nginx 的 certs 目录、随手导出的 pem）
+deploy/certs/
+*.pem
+*.key
+
+# ---- 本地数据库 ----
+*.db
+*.sqlite
+*.sqlite3
+
+# ---- 前端 ----
+web/node_modules/
+web/dist/
+web/.vite/
+
+# ---- 编辑器 / 操作系统 ----
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
